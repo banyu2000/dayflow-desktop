@@ -28,7 +28,7 @@
 
 ## 下载安装
 
-1. 从 [Releases](https://github.com/banyu2000/dayflow-desktop/releases) 下载 `DayFlow-v1.3.0-windows.zip`。
+1. 从 [Releases](https://github.com/banyu2000/dayflow-desktop/releases) 下载 `DayFlow-v1.3.1-windows.zip`。
 2. 提取全部文件到有写入权限的固定目录，再双击 `日常日历.exe`。
 3. 顶部“悬浮条”进入极简模式；点 `↗` 展开；`··· → 开机自启动` 可切换登录后自启动。
 

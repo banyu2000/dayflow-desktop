@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+using System.Text;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -17,6 +19,30 @@ namespace DayFlow
 {
     public static class StartupRegistration
     {
+        [ComImport, Guid("00021401-0000-0000-C000-000000000046")]
+        class ShellLink { }
+        [ComImport, InterfaceType(ComInterfaceType.InterfaceIsIUnknown), Guid("000214F9-0000-0000-C000-000000000046")]
+        interface IShellLinkW
+        {
+            void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int length, IntPtr findData, uint flags);
+            void GetIDList(out IntPtr idList);
+            void SetIDList(IntPtr idList);
+            void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder description, int length);
+            void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string description);
+            void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder directory, int length);
+            void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string directory);
+            void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder arguments, int length);
+            void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string arguments);
+            void GetHotkey(out short hotkey);
+            void SetHotkey(short hotkey);
+            void GetShowCmd(out int command);
+            void SetShowCmd(int command);
+            void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder path, int length, out int index);
+            void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string path, int index);
+            void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string path, uint reserved);
+            void Resolve(IntPtr window, uint flags);
+            void SetPath([MarshalAs(UnmanagedType.LPWStr)] string path);
+        }
         public static string ShortcutPath { get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "DayFlowCalendar.lnk"); } }
         static string Executable { get { return Assembly.GetExecutingAssembly().Location; } }
         static void ValidatePath(string path)
@@ -40,46 +66,40 @@ namespace DayFlow
             ValidatePath(executable);
             return Quote(Path.GetFullPath(executable)) + " " + Arguments(dataFolder);
         }
-        static object Property(object target, string name) { return target.GetType().InvokeMember(name, BindingFlags.GetProperty, null, target, null); }
-        static void Property(object target, string name, object value)
-        {
-            try { target.GetType().InvokeMember(name, BindingFlags.SetProperty, null, target, new[] { value }); }
-            catch (TargetInvocationException e) { throw new IOException("Unable to set Windows shortcut property: " + name, e.InnerException ?? e); }
-        }
-        static object OpenShortcut(string path, out object shell)
-        {
-            shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell", true));
-            return shell.GetType().InvokeMember("CreateShortcut", BindingFlags.InvokeMethod, null, shell, new object[] { path });
-        }
         static void Release(object item) { if (item != null && Marshal.IsComObject(item)) Marshal.FinalReleaseComObject(item); }
         public static void SaveShortcut(string path, string executable, string folder)
         {
             ValidatePath(executable); string args = Arguments(folder);
             Directory.CreateDirectory(Path.GetDirectoryName(path));
-            object shell = null, link = null;
+            object instance = null;
             try
             {
-                link = OpenShortcut(path, out shell);
-                Property(link, "TargetPath", Path.GetFullPath(executable)); Property(link, "Arguments", args);
-                Property(link, "WorkingDirectory", Path.GetDirectoryName(Path.GetFullPath(executable)));
-                Property(link, "Description", "日常日历 · 登录后恢复日历或极简悬浮条");
-                Property(link, "IconLocation", Path.GetFullPath(executable) + ",0");
-                link.GetType().InvokeMember("Save", BindingFlags.InvokeMethod, null, link, null);
+                // Use the Unicode shell interface directly. WScript.Shell can
+                // reject a Chinese executable path on non-Chinese Windows.
+                instance = new ShellLink(); IShellLinkW link = (IShellLinkW)instance;
+                link.SetPath(Path.GetFullPath(executable)); link.SetArguments(args);
+                link.SetWorkingDirectory(Path.GetDirectoryName(Path.GetFullPath(executable)));
+                link.SetDescription("日常日历 · 登录后恢复日历或极简悬浮条");
+                link.SetIconLocation(Path.GetFullPath(executable), 0);
+                ((IPersistFile)instance).Save(Path.GetFullPath(path), true);
             }
-            finally { Release(link); Release(shell); }
+            finally { Release(instance); }
         }
         public static bool MatchesShortcut(string path, string executable, string folder)
         {
             if (!File.Exists(path)) return false;
-            object shell = null, link = null;
+            object instance = null;
             try
             {
-                link = OpenShortcut(path, out shell);
-                return String.Equals((string)Property(link, "TargetPath"), Path.GetFullPath(executable), StringComparison.OrdinalIgnoreCase)
-                    && String.Equals((string)Property(link, "Arguments"), Arguments(folder), StringComparison.OrdinalIgnoreCase);
+                instance = new ShellLink(); ((IPersistFile)instance).Load(Path.GetFullPath(path), 0);
+                IShellLinkW link = (IShellLinkW)instance;
+                StringBuilder target = new StringBuilder(32768), arguments = new StringBuilder(32768);
+                link.GetPath(target, target.Capacity, IntPtr.Zero, 4); link.GetArguments(arguments, arguments.Capacity);
+                return String.Equals(target.ToString(), Path.GetFullPath(executable), StringComparison.OrdinalIgnoreCase)
+                    && String.Equals(arguments.ToString(), Arguments(folder), StringComparison.OrdinalIgnoreCase);
             }
             catch (COMException) { return false; }
-            finally { Release(link); Release(shell); }
+            finally { Release(instance); }
         }
         public static bool IsEnabled(string folder) { return MatchesShortcut(ShortcutPath, Executable, folder); }
         public static void SetEnabled(bool enabled, string folder)

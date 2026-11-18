@@ -1,4 +1,4 @@
-﻿param([string]$Version = '1.3.0')
+﻿param([string]$Version = '1.3.1')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw 'Use a semantic version such as 1.3.0.' }
 $dayflowRoot = Split-Path $PSScriptRoot -Parent
