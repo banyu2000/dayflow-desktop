@@ -41,7 +41,11 @@ namespace DayFlow
             return Quote(Path.GetFullPath(executable)) + " " + Arguments(dataFolder);
         }
         static object Property(object target, string name) { return target.GetType().InvokeMember(name, BindingFlags.GetProperty, null, target, null); }
-        static void Property(object target, string name, object value) { target.GetType().InvokeMember(name, BindingFlags.SetProperty, null, target, new[] { value }); }
+        static void Property(object target, string name, object value)
+        {
+            try { target.GetType().InvokeMember(name, BindingFlags.SetProperty, null, target, new[] { value }); }
+            catch (TargetInvocationException e) { throw new IOException("Unable to set Windows shortcut property: " + name, e.InnerException ?? e); }
+        }
         static object OpenShortcut(string path, out object shell)
         {
             shell = Activator.CreateInstance(Type.GetTypeFromProgID("WScript.Shell", true));
