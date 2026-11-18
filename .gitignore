@@ -1,0 +1,27 @@
+# Local application data and user backups
+data/
+calendar*.json*
+before-restore-*.json
+*.lnk
+
+# Build, package and test outputs
+build/
+bin/
+obj/
+dist/
+test-output/
+self-test/
+.build-temp/
+*.pdb
+*.exe
+*.zip
+
+# Local environment and editor files
+.env
+.env.*
+*.user
+*.suo
+.vs/
+.vscode/
+Thumbs.db
+Desktop.ini
